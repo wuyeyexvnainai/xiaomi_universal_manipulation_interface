@@ -44,6 +44,8 @@ register_codecs()
 @click.option('-n', '--num_workers', type=int, default=None)
 def main(input, output, out_res, out_fov, compression_level, 
          no_mirror, mirror_swap, num_workers):
+    print(input)
+    print(output)
     if os.path.isfile(output):
         if click.confirm(f'Output file {output} exists! Overwrite?', abort=True):
             pass

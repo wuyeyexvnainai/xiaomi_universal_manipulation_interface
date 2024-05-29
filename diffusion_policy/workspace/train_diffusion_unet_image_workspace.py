@@ -30,6 +30,8 @@ from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to
 from diffusion_policy.model.diffusion.ema_model import EMAModel
 from diffusion_policy.model.common.lr_scheduler import get_scheduler
 from accelerate import Accelerator
+from torch.cuda.amp import GradScaler,autocast
+scaler = GradScaler()
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
@@ -90,7 +92,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
     def run(self):
         cfg = copy.deepcopy(self.cfg)
 
-        accelerator = Accelerator(log_with='wandb')
+        accelerator = Accelerator(mixed_precision='fp16', log_with='wandb')
         wandb_cfg = OmegaConf.to_container(cfg.logging, resolve=True)
         wandb_cfg.pop('project')
         accelerator.init_trackers(
@@ -229,7 +231,8 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         # compute loss
                         raw_loss = self.model(batch)
                         loss = raw_loss / cfg.training.gradient_accumulate_every
-                        loss.backward()
+                        # loss.backward()
+                        accelerator.backward(loss)
 
                         # step optimizer
                         if self.global_step % cfg.training.gradient_accumulate_every == 0:

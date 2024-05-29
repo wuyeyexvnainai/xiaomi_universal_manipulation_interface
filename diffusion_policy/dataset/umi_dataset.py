@@ -263,7 +263,10 @@ class UmiDataset(BaseDataset):
             # move channel last to channel first
             # T,H,W,C
             # convert uint8 image to float32
-            obs_dict[key] = np.moveaxis(data[key], -1, 1).astype(np.float32) / 255.
+            # obs_dict[key] = np.moveaxis(data[key], -1, 1).astype(np.float32) / 255.
+
+            obs_image = torch.from_numpy(data[key])
+            obs_dict[key] = obs_image.permute(0, 3, 1, 2) / 255.0
             # T,C,H,W
             del data[key]
         for key in self.sampler_lowdim_keys:
@@ -346,6 +349,7 @@ class UmiDataset(BaseDataset):
                 base_pose_mat=pose_mat[-1],
                 pose_rep=self.obs_pose_repr,
                 backward=False)
+            
             action_pose_mat = convert_pose_mat_rep(
                 action_mat, 
                 base_pose_mat=pose_mat[-1],
@@ -366,7 +370,8 @@ class UmiDataset(BaseDataset):
         data['action'] = np.concatenate(actions, axis=-1)
         
         torch_data = {
-            'obs': dict_apply(obs_dict, torch.from_numpy),
+            'obs': dict_apply(obs_dict, torch.from_numpy, self.rgb_keys),
             'action': torch.from_numpy(data['action'].astype(np.float32))
         }
+        
         return torch_data

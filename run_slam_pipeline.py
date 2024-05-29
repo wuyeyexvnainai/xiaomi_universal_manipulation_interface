@@ -17,10 +17,11 @@ import subprocess
 
 # %%
 @click.command()
-@click.argument('session_dir', nargs=-1)
-@click.option('-c', '--calibration_dir', type=str, default=None)
+@click.argument('session_dir', nargs=-1)# session数据收集阶段
+@click.option('-c', '--calibration_dir', type=str, default=None)# calibration标定
 def main(session_dir, calibration_dir):
     script_dir = pathlib.Path(__file__).parent.joinpath('scripts_slam_pipeline')
+
     if calibration_dir is None:
         calibration_dir = pathlib.Path(__file__).parent.joinpath('example', 'calibration')
     else:
@@ -28,6 +29,7 @@ def main(session_dir, calibration_dir):
     assert calibration_dir.is_dir()
 
     for session in session_dir:
+
         session = pathlib.Path(os.path.expanduser(session)).absolute()
 
         print("############## 00_process_videos #############")
