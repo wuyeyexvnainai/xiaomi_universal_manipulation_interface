@@ -29,6 +29,7 @@ from umi.common.cv_util import draw_predefined_mask
 @click.option('-np', '--no_docker_pull', is_flag=True, default=False, help="pull docker image from docker hub")
 @click.option('-nm', '--no_mask', is_flag=True, default=False, help="Whether to mask out gripper and mirrors. Set if map is created with bare GoPro no on gripper.")
 def main(input_dir, map_path, docker_image, no_docker_pull, no_mask):
+    # video_dir = mapping 
     video_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
     for fn in ['raw_video.mp4', 'imu_data.json']:
         assert video_dir.joinpath(fn).is_file()
@@ -62,8 +63,9 @@ def main(input_dir, map_path, docker_image, no_docker_pull, no_mask):
         slam_mask = np.zeros((2028, 2704), dtype=np.uint8)
         slam_mask = draw_predefined_mask(
             slam_mask, color=255, mirror=True, gripper=False, finger=True)
+        # 将得到的图像信息存储到 mask_write_path 这个地址
         cv2.imwrite(str(mask_write_path.absolute()), slam_mask)
-
+        
     map_mount_source = pathlib.Path(map_path)
     map_mount_target = pathlib.Path('/map').joinpath(map_mount_source.name)
 

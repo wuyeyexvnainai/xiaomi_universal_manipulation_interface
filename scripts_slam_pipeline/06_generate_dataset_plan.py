@@ -103,8 +103,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # optical center to mounting screw, positive is when optical center is in front of the mount
     cam_to_mount_offset = 0.01465 # constant for GoPro Hero 9,10,11
     cam_to_tip_offset = cam_to_mount_offset + tcp_offset
-
+    # 描述了工具坐标系相对于相机的位置和姿态
     pose_cam_tcp = np.array([0, cam_to_center_height, cam_to_tip_offset, 0,0,0])
+    # 工件坐标系相对于相机坐标系为变化矩阵
     tx_cam_tcp = pose_to_mat(pose_cam_tcp)
         
     # SLAM map origin to table tag transform
@@ -112,10 +113,13 @@ def main(input, output, tcp_offset, tx_slam_tag,
         path = demos_dir.joinpath('mapping', 'tx_slam_tag.json')
         assert path.is_file()
         tx_slam_tag = str(path)
+    # 以只读模式，从tx_slam_tag.json文件中读取key为tx_slam_tag的值
     tx_slam_tag = np.array(json.load(
         open(os.path.expanduser(tx_slam_tag), 'r')
         )['tx_slam_tag']
     )
+    # tx_slam_tag:tagert标签（ArUco）坐标系相对于slam坐标系的坐标变换
+    # tx_tag_slam：slam坐标系相对于tagert标签（ArUco）坐标系的坐标变换
     tx_tag_slam = np.linalg.inv(tx_slam_tag)
 
     # load gripper calibration
@@ -125,6 +129,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     with ExifToolHelper() as et:
         for gripper_cal_path in demos_dir.glob("gripper*/gripper_range.json"):
             mp4_path = gripper_cal_path.parent.joinpath('raw_video.mp4')
+            # 搜取视频中的元数据
             meta = list(et.get_metadata(str(mp4_path)))[0]
             cam_serial = meta['QuickTime:CameraSerialNumber']
 
@@ -136,6 +141,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 'aruco_measured_width': [min_width, max_width],
                 'aruco_actual_width': [min_width, max_width]
             }
+            # **gripper_cal_data表示将字典解包
             gripper_cal_interp = get_gripper_calibration_interpolator(**gripper_cal_data)
             gripper_id_gripper_cal_map[gripper_id] = gripper_cal_interp
             cam_serial_gripper_cal_map[cam_serial] = gripper_cal_interp
@@ -152,6 +158,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     ignore_cam_serials = set()
     if ignore_cameras is not None:
         serials = ignore_cameras.split(',')
+        # set ()将列表 serials 转换成集合 ignore_cam_serials。集合自动去除任何重复的元素，确保每个序列号都是唯一的。
         ignore_cam_serials = set(serials)
     
     fps = None
@@ -180,8 +187,10 @@ def main(input, output, tcp_offset, tx_slam_tag,
             
             with av.open(str(mp4_path), 'r') as container:
                 stream = container.streams.video[0]
+                # 获取视频的总帧数
                 n_frames = stream.frames
                 if fps is None:
+                    # 将视频流的平均帧率赋值给 fps 变量
                     fps = stream.average_rate
                 else:
                     if fps != stream.average_rate:
@@ -202,7 +211,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     if len(rows) == 0:
         print("No valid videos found!")
         exit(1)
-            
+    # 我们创建了一个包含这些视频元数据的 DataFrame。DataFrame 的列是根据字典的键自动生成的。        
     video_meta_df = pd.DataFrame(data=rows)
 
 
@@ -216,12 +225,14 @@ def main(input, output, tcp_offset, tx_slam_tag,
     #     "end_timestamp": float
     # }
     # map serial to count
+    # 我们使用 value_counts() 方法来计算每个唯一值出现的次数，得到另一个 Series 对象 serial_count。
     serial_count = video_meta_df['camera_serial'].value_counts()
     print("Found following cameras:")
     print(serial_count)
     n_cameras = len(serial_count)
     
     events = list()
+    # iterrows() 是 DataFrame 的一个方法，它返回 DataFrame 的行的索引和数据作为一个序列。
     for vid_idx, row in video_meta_df.iterrows():
         events.append({
             'vid_idx': vid_idx,
@@ -235,6 +246,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
             't': row['end_timestamp'],
             'is_start': False
         })
+    # 按升序对events进行排序，排序的标准是根据匿名函数lambda
     events = sorted(events, key=lambda x: x['t'])
     
     demo_data_list = list()
@@ -242,6 +254,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
     on_cameras = set()
     used_videos = set()
     t_demo_start = None
+
+    # enumerate() 函数返回每个事件的索引 i 和可迭代对象对应的值 event。
     for i, event in enumerate(events):
         # update state based on event
         if event['is_start']:
@@ -266,6 +280,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
             # undo state update to get full set of videos
             demo_vid_idxs = set(on_videos)
             demo_vid_idxs.add(event['vid_idx'])
+            # 这行代码的作用是将 demo_vid_idxs 中的所有视频索引合并到 used_videos 中。
+            # 如果 demo_vid_idxs 中的某个索引已经存在于 used_videos 中，则不会重复添加。
             used_videos.update(demo_vid_idxs)
             
             demo_data_list.append({
@@ -284,7 +300,11 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # add video_meta_df['gripper_hardware_id'] column
     # cam_serial_gripper_hardware_id_map Dict[str, int]
     finger_tag_det_th = 0.8
+    # 创建了一个空字典
     vid_idx_gripper_hardware_id_map = dict()
+    # 这行代码使用了 collections 模块中的 defaultdict 类来创建一个字典 cam_serial_gripper_ids_map
+    # 这个字典的默认值是空列表（由 list 提供）
+    # 使用 defaultdict 的好处是，当你尝试访问或修改一个尚未在字典中显式定义的键时，它会自动为你创建一个空列表，而不是抛出 KeyError
     cam_serial_gripper_ids_map = collections.defaultdict(list)
     for vid_idx, row in video_meta_df.iterrows():
         video_dir = row['video_dir']

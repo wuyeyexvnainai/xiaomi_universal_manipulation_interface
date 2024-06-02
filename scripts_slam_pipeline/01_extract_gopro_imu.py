@@ -44,11 +44,14 @@ def main(docker_image, num_workers, no_docker_pull, session_dir):
         input_dir = pathlib.Path(os.path.expanduser(session)).joinpath('demos')
         input_video_dirs = [x.parent for x in input_dir.glob('*/raw_video.mp4')]
         print(f'Found {len(input_video_dirs)} video dirs')
-
+        # tqdm 一个用于创建进度条的库
         with tqdm(total=len(input_video_dirs)) as pbar:
             # one chunk per thread, therefore no synchronization needed
+            # 设置一个线程池管理器
             with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+                # 这个集合通常用于存储 concurrent.futures.Future 对象，这些对象代表了异步操作。
                 futures = set()
+                
                 for video_dir in tqdm(input_video_dirs):
                     video_dir = video_dir.absolute()
                     if video_dir.joinpath('imu_data.json').is_file():
@@ -79,9 +82,12 @@ def main(docker_image, num_workers, no_docker_pull, session_dir):
                         # limit number of inflight tasks
                         completed, futures = concurrent.futures.wait(futures, 
                             return_when=concurrent.futures.FIRST_COMPLETED)
+                        # 更新进度条，反映已经完成的任务量
                         pbar.update(len(completed))
 
+                    # 将新建的Future对象添加到future集合中
                     futures.add(executor.submit(
+                        # lambda 表示匿名函数，x：cmd ；stdo: stdout_path ；stde：stderr_path，作为一个映射函数
                         lambda x, stdo, stde: subprocess.run(x, 
                             cwd=str(video_dir),
                             stdout=stdo.open('w'),

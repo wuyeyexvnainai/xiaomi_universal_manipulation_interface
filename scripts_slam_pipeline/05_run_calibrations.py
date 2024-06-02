@@ -46,7 +46,7 @@ def main(session_dir):
         ]
         subprocess.run(cmd)
         
-        # run gripper range calibration
+        # run gripper range calibration：夹爪范围校准
         script_path = script_dir.joinpath('calibrate_gripper_range.py')
         assert script_path.is_file()
         

@@ -66,7 +66,7 @@ def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
                     completed, futures = concurrent.futures.wait(futures, 
                         return_when=concurrent.futures.FIRST_COMPLETED)
                     pbar.update(len(completed))
-
+                # 将lambda提交给线程执行器，进行异步执行
                 futures.add(executor.submit(
                     lambda x: subprocess.run(x, 
                         capture_output=True), 

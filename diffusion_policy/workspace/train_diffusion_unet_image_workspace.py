@@ -30,8 +30,8 @@ from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to
 from diffusion_policy.model.diffusion.ema_model import EMAModel
 from diffusion_policy.model.common.lr_scheduler import get_scheduler
 from accelerate import Accelerator
-from torch.cuda.amp import GradScaler,autocast
-scaler = GradScaler()
+# from torch.cuda.amp import GradScaler,autocast
+# scaler = GradScaler()
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
@@ -92,7 +92,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
     def run(self):
         cfg = copy.deepcopy(self.cfg)
 
-        accelerator = Accelerator(mixed_precision='fp16', log_with='wandb')
+        accelerator = Accelerator(log_with='wandb')
         wandb_cfg = OmegaConf.to_container(cfg.logging, resolve=True)
         wandb_cfg.pop('project')
         accelerator.init_trackers(
@@ -180,19 +180,19 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         )
 
         # device transfer
-        # device = torch.device(cfg.training.device)
-        # self.model.to(device)
-        # if self.ema_model is not None:
-        #     self.ema_model.to(device)
-        # optimizer_to(self.optimizer, device)
-
-        # accelerator
-        train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler = accelerator.prepare(
-            train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler
-        )
-        device = self.model.device
+        device = torch.device(cfg.training.device)
+        self.model.to(device)
         if self.ema_model is not None:
             self.ema_model.to(device)
+        optimizer_to(self.optimizer, device)
+
+        # accelerator
+        # train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler = accelerator.prepare(
+        #     train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler
+        # )
+        # device = self.model.device
+        # if self.ema_model is not None:
+        #     self.ema_model.to(device)
 
         # save batch for sampling
         train_sampling_batch = None
@@ -231,8 +231,8 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         # compute loss
                         raw_loss = self.model(batch)
                         loss = raw_loss / cfg.training.gradient_accumulate_every
-                        # loss.backward()
-                        accelerator.backward(loss)
+                        loss.backward()
+                        # accelerator.backward(loss)
 
                         # step optimizer
                         if self.global_step % cfg.training.gradient_accumulate_every == 0:

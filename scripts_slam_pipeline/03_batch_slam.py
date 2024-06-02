@@ -46,6 +46,7 @@ def runner(cmd, cwd, stdout_path, stderr_path, timeout, **kwargs):
 @click.option('-np', '--no_docker_pull', is_flag=True, default=False, help="pull docker image from docker hub")
 def main(input_dir, map_path, docker_image, num_workers, max_lost_frames, timeout_multiple, no_docker_pull):
     input_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
+    # 'demo*/raw_video.mp4' 表示查找 input_dir 下所有以 demo 开头（后面可以跟任意字符）并且文件名为 raw_video.mp4 的文件路径。
     input_video_dirs = [x.parent for x in input_dir.glob('demo*/raw_video.mp4')]
     input_video_dirs += [x.parent for x in input_dir.glob('map*/raw_video.mp4')]
     print(f'Found {len(input_video_dirs)} video dirs')
@@ -91,9 +92,12 @@ def main(input_dir, map_path, docker_image, num_workers, max_lost_frames, timeou
                 mask_write_path = video_dir.joinpath('slam_mask.png')
                 
                 # find video duration
-                with av.open(str(video_dir.joinpath('raw_video.mp4').absolute())) as container:
+                # av.open() 函数用于打开一个多媒体容器，例如视频文件。
+                with av.open(str(video_dir.joinpath('raw_video.mp4').absolute())) as container:                  
                     video = container.streams.video[0]
+                    # 计算视频的持续时间：时间戳个数*单位时间戳的时间长度
                     duration_sec = float(video.duration * video.time_base)
+                # help='timeout_multiple * duration = timeout'
                 timeout = duration_sec * timeout_multiple
                 
                 slam_mask = np.zeros((2028, 2704), dtype=np.uint8)

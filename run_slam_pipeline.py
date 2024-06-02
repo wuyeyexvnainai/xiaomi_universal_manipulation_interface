@@ -78,12 +78,14 @@ def main(session_dir, calibration_dir):
             '--map_path', str(map_path)
         ]
         result = subprocess.run(cmd)
+        result = subprocess.run(cmd)
         assert result.returncode == 0
 
         print("############# 04_detect_aruco ###########")
         script_path = script_dir.joinpath("04_detect_aruco.py")
         assert script_path.is_file()
         camera_intrinsics = calibration_dir.joinpath('gopro_intrinsics_2_7k.json')
+        # ArUco（Augmented Reality Universal Code）是一种用于增强现实（AR）应用中的标记系统，它允许相机轻松地识别和定位平面上的标记图案。
         aruco_config = calibration_dir.joinpath('aruco_config.yaml')
         assert camera_intrinsics.is_file()
         assert aruco_config.is_file()
