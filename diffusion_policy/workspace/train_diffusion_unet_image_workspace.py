@@ -180,19 +180,19 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         )
 
         # device transfer
-        device = torch.device(cfg.training.device)
-        self.model.to(device)
-        if self.ema_model is not None:
-            self.ema_model.to(device)
-        optimizer_to(self.optimizer, device)
-
-        # accelerator
-        # train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler = accelerator.prepare(
-        #     train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler
-        # )
-        # device = self.model.device
+        # device = torch.device(cfg.training.device)
+        # self.model.to(device)
         # if self.ema_model is not None:
         #     self.ema_model.to(device)
+        # optimizer_to(self.optimizer, device)
+
+        # accelerator
+        train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler = accelerator.prepare(
+            train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler
+        )
+        device = self.model.device
+        if self.ema_model is not None:
+            self.ema_model.to(device)
 
         # save batch for sampling
         train_sampling_batch = None
