@@ -306,19 +306,24 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # 这个字典的默认值是空列表（由 list 提供）
     # 使用 defaultdict 的好处是，当你尝试访问或修改一个尚未在字典中显式定义的键时，它会自动为你创建一个空列表，而不是抛出 KeyError
     cam_serial_gripper_ids_map = collections.defaultdict(list)
+    # 使用iterrows()迭代DataFrame
     for vid_idx, row in video_meta_df.iterrows():
         video_dir = row['video_dir']
         pkl_path = video_dir.joinpath('tag_detection.pkl')
         if not pkl_path.is_file():
             vid_idx_gripper_hardware_id_map[vid_idx] = -1
             continue
+        # .open('rb')以二进制的方式打开文件
+        # pickle.load（）将读取到的数据反序列化为python对象
         tag_data = pickle.load(pkl_path.open('rb'))
         n_frames = len(tag_data)
+        # 创造一个字典，如果访问字典里的键不存在时，就会生成默认值0
         tag_counts = collections.defaultdict(lambda: 0)
         for frame in tag_data:
             for key in frame['tag_dict'].keys():
                 tag_counts[key] += 1
         tag_stats = collections.defaultdict(lambda: 0.0)
+        # .items() 是字典对象的一个方法，它用于返回字典中的所有键值对（key-value pairs）
         for k, v in tag_counts.items():
             tag_stats[k] = v / n_frames
             
@@ -327,6 +332,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         # tag 6, 7 are reserved for gripper 1
         max_tag_id = np.max(list(tag_stats.keys()))
         tag_per_gripper = 6
+        # //地板除，向下取整
         max_gripper_id = max_tag_id // tag_per_gripper
         
         gripper_prob_map = dict()
@@ -366,7 +372,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         cam_serial_gripper_hardware_id_map[cam_serial] = gripper_id 
         
     # %% stage 4
-    # disambiguiate gripper left/right
+    # disambiguiate gripper left/right；取消夹爪左右歧义
     # camera idx / robot idx convention:
     # from right (0) to left (1)
     # non gripper cameras are after (2,3,4..) sorted by serial number
@@ -391,12 +397,12 @@ def main(input, output, tcp_offset, tx_slam_tag,
         else:
             other_cam_serials.append(cs)
     
-    # assign non-gripper camera index by ascending camera serial
+    # assign non-gripper camera index by ascending camera serial；通过递增的相机序列分配非夹持器相机索引
     cam_serial_cam_idx_map = dict()
     for i, cs in enumerate(sorted(other_cam_serials)):
         cam_serial_cam_idx_map[cs] = len(grip_cam_serials) + i
 
-    # disambiguiate gripper left/right at each demo episode
+    # disambiguiate gripper left/right at each demo episode；在每个演示集中消除左右夹持器的歧义
     cam_serial_right_to_left_idx_map = collections.defaultdict(list)
     vid_idx_cam_idx_map = np.full(len(video_meta_df), fill_value=-1, dtype=np.int32)
     for demo_idx, demo_data in enumerate(demo_data_list):
@@ -404,7 +410,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         start_timestamp = demo_data['start_timestamp']
         end_timestamp = demo_data['end_timestamp']
 
-        # build pose interpolator for each gripper video
+        # build pose interpolator(插值) for each gripper video
         cam_serials = list()
         gripper_vid_idxs = list()
         pose_interps = list()
@@ -456,13 +462,13 @@ def main(input, output, tcp_offset, tx_slam_tag,
         
         # heuristic
         # project other camera's position 
-        # to the cross product of this camera's z (forward) and global z (up)
+        # to the cross product（叉积） of this camera's z (forward) and global z (up)
         # which is the "right" of the camera
         # if positive, this means the other camera is on the "right" of this camerea
-        # similarly, the most negative camera is the right-most camera (all others are on the left)
+        # similarly, the most negative（负） camera is the right-most camera (all others are on the left)
         x_proj_avg = list()
         for i in range(len(pose_samples)):
-            # general formulation, compatiable with even >2 grippers
+            # general formulation（通用设定）, compatiable（兼容） with even >2 grippers
             this_proj_avg = list()
             for j in range(len(pose_samples)):
                 # 0 if i == j
@@ -478,9 +484,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
         
         for vid_idx, cam_serial, cam_right_idx in zip(
             gripper_vid_idxs, cam_serials, camera_right_to_left_idxs):
-            # save result for aggregation 
+            # save result for aggregation（集合） 
             cam_serial_right_to_left_idx_map[cam_serial].append(cam_right_idx)
-            # save result for per-episode assignment
+            # save result for per-episode assignment（分配）
             vid_idx_cam_idx_map[vid_idx] = cam_right_idx
 
     # assign most common cam index to each gripper camera
@@ -543,7 +549,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         demo_video_meta_df.set_index('camera_idx', inplace=True)
         demo_video_meta_df.sort_index(inplace=True)
         
-        # determine optimal alignment
+        # determine optimal alignment（确定最佳对齐）
         dt = None
         alignment_costs = list()
         for cam_idx, row in demo_video_meta_df.iterrows():
@@ -558,7 +564,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         # first video in bundle
         align_cam_idx = np.argmin([sum(x) for x in alignment_costs])
 
-        # mock experiment
+        # mock experiment（模拟实验）
         # alignment_costs = list()
         # starts = [0.2, 0.1, 0.0]
         # for i in range(len(starts)):
@@ -570,11 +576,11 @@ def main(input, output, tcp_offset, tx_slam_tag,
         # align_video_idx = np.argmin([sum(x) for x in alignment_costs])
         # print(align_video_idx)
 
-        # rewrite start_timestamp to be integer multiple of dt
+        # rewrite start_timestamp to be integer multiple of dt（要将start_timestamp重写为某个时间间隔dt的整数倍）
         align_video_start = demo_video_meta_df.loc[align_cam_idx]['start_timestamp']
         start_timestamp += dt - ((start_timestamp - align_video_start) % dt)
 
-        # descritize timestamps for all videos
+        # descritize（离散化） timestamps for all videos
         cam_start_frame_idxs = list()
         n_frames = int((end_timestamp - start_timestamp) / dt)
         for cam_idx, row in demo_video_meta_df.iterrows():
@@ -588,7 +594,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         demo_timestamps = np.arange(n_frames) * float(dt) + start_timestamp
 
         # load pose and gripper data for each video
-        # determin valid frames for each video
+        # determin valid（有效） frames for each video（确定每个视频的有效帧）
         all_cam_poses = list()
         all_gripper_widths = list()
         all_is_valid = list()
@@ -608,7 +614,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
                     print(f"Skipping {video_dir.name}, manually filtered with check_result.txt!=true")
                     continue
 
-            # load SLAM data
+            # load SLAM data==camera_trajectory.csv
             csv_path = video_dir.joinpath('camera_trajectory.csv')
             if not csv_path.is_file():
                 print(f"Skipping {video_dir.name}, no camera_trajectory.csv.")
@@ -616,11 +622,11 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 continue            
             
             csv_df = pd.read_csv(csv_path)
-            # select aligned frames
+            # select aligned（对齐的） frames
             df = csv_df.iloc[start_frame_idx: start_frame_idx+n_frames]
             is_tracked = (~df['is_lost']).to_numpy()
 
-            # basic filtering to remove bad tracking
+            # basic filtering（过滤） to remove bad tracking
             n_frames_lost = (~is_tracked).sum()
             if n_frames_lost > 10:
                 print(f"Skipping {video_dir.name}, {n_frames_lost} frames are lost.")
@@ -645,7 +651,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
             tx_slam_cam = cam_pose
             tx_tag_cam = tx_tag_slam @ tx_slam_cam
 
-            # TODO: handle optinal robot cal based filtering
+            # TODO: handle optinal robot cal（机器人校准） based filtering（处理基于机器人校准的可选过滤”。）
             is_step_valid = is_tracked.copy()
             
 
@@ -660,7 +666,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
             # select aligned frames
             tag_detection_results = tag_detection_results[start_frame_idx: start_frame_idx+n_frames]
 
-            # one item per frame
+            # one item per frame（每一项的各个时间戳）
             video_timestamps = np.array([x['time'] for x in tag_detection_results])
 
             if len(df) != len(video_timestamps):
@@ -703,8 +709,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
             
             this_gripper_widths = gripper_interp(video_timestamps)
             
-            # transform to tcp frame
-            tx_tag_tcp = tx_tag_cam @ tx_cam_tcp
+            # transform to tcp frame（工具坐标系）
+            tx_tag_tcp = tx_tag_cam @ tx_cam_tcp# @表示矩阵乘法
             pose_tag_tcp = mat_to_pose(tx_tag_tcp)
             
             # output value
@@ -720,7 +726,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
             n_dropped_demos += 1
             continue
 
-        # aggregate valid result
+        # aggregate valid result（结合有效的结果）
         all_is_valid = np.array(all_is_valid)
         is_step_valid = np.all(all_is_valid, axis=0)
         
@@ -734,8 +740,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
             demo_start_poses.append(cam_poses[first_valid_step])
             demo_end_poses.append(cam_poses[last_valid_step])
 
-        # determine episode segmentation
-        # remove valid segments that are too short
+        # determine episode segmentation（确定每个episode的分割）
+        # remove valid segments that are too short（删除太短的有效段）
         segment_slices, segment_type = get_bool_segments(is_step_valid)
         for s, is_valid_segment in zip(segment_slices, segment_type):
             start = s.start
@@ -789,7 +795,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     print("n_dropped_demos", n_dropped_demos)
 
     # %%
-    # dump the plan to pickle
+    # dump the plan to pickle（序列化收到的数据）
     pickle.dump(all_plans, output.open('wb'))
     
 

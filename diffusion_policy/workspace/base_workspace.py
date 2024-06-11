@@ -23,6 +23,8 @@ class BaseWorkspace:
     def output_dir(self):
         output_dir = self._output_dir
         if output_dir is None:
+            # hydra 库的一个写法，通过HydraConfig.get()创造一个单例类
+            # runtime在程序运行时会自动填充output_dir等数据，我们可以在yaml文件中自定义目录
             output_dir = HydraConfig.get().runtime.output_dir
         return output_dir
     

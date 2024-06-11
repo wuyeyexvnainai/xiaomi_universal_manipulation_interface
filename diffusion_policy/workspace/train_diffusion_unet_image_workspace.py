@@ -74,10 +74,15 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         ]
         # self.optimizer = hydra.utils.instantiate(
         #     cfg.optimizer, params=param_groups)
+        # 将 Hydra 配置对象中的 optimizer 部分转换为一个 Python 容器（通常是字典）。
+        # resolve=True 参数表示解析配置中的任何表达式或引用。
         optimizer_cfg = OmegaConf.to_container(cfg.optimizer, resolve=True)
+        # 移除 _target_ 键
         optimizer_cfg.pop('_target_')
+        # 创建优化器
         self.optimizer = torch.optim.AdamW(
             params=param_groups,
+            # **optimizer_cfg 是 Python 中的解包操作符
             **optimizer_cfg
         )
 
@@ -91,7 +96,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
 
     def run(self):
         cfg = copy.deepcopy(self.cfg)
-
+        # 获得一个可以处理不同硬件加速器的对象，并且配置了使用 W&B 进行日志记录。
         accelerator = Accelerator(log_with='wandb')
         wandb_cfg = OmegaConf.to_container(cfg.logging, resolve=True)
         wandb_cfg.pop('project')
@@ -101,7 +106,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
             init_kwargs={"wandb": wandb_cfg}
         )
 
-        # resume training
+        # resume training：继续训练
         if cfg.training.resume:
             lastest_ckpt_path = self.get_checkpoint_path()
             if lastest_ckpt_path.is_file():
@@ -115,16 +120,20 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         train_dataloader = DataLoader(dataset, **cfg.dataloader)
 
         # compute normalizer on the main process and save to disk
+        # 在主程序中计算归一化因子，并将其保存到磁盘
         normalizer_path = os.path.join(self.output_dir, 'normalizer.pkl')
+        # 判断该程序是不是主程序
         if accelerator.is_main_process:
             normalizer = dataset.get_normalizer()
             pickle.dump(normalizer, open(normalizer_path, 'wb'))
 
         # load normalizer on all processes
+        # 同步所有进程
         accelerator.wait_for_everyone()
         normalizer = pickle.load(open(normalizer_path, 'rb'))
 
         # configure validation dataset
+        # 配置验证集
         val_dataset = dataset.get_validation_dataset()
         val_dataloader = DataLoader(val_dataset, **cfg.val_dataloader)
         print('train dataset:', len(dataset), 'train dataloader:', len(train_dataloader))
@@ -135,9 +144,11 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
             self.ema_model.set_normalizer(normalizer)
 
         # configure lr scheduler
+        # 配置学习率调度器
         lr_scheduler = get_scheduler(
             cfg.training.lr_scheduler,
             optimizer=self.optimizer,
+            # 预热步数
             num_warmup_steps=cfg.training.lr_warmup_steps,
             num_training_steps=(
                 len(train_dataloader) * cfg.training.num_epochs) \
@@ -148,6 +159,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         )
 
         # configure ema
+        # 配置（指数移动平均）
         ema: EMAModel = None
         if cfg.training.use_ema:
             ema = hydra.utils.instantiate(
@@ -174,6 +186,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         # )
 
         # configure checkpoint
+        # 配置检查点
         topk_manager = TopKCheckpointManager(
             save_dir=os.path.join(self.output_dir, 'checkpoints'),
             **cfg.checkpoint.topk
@@ -187,6 +200,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         # optimizer_to(self.optimizer, device)
 
         # accelerator
+        # accelerator.prepare（），prepare方法会根据训练设置，自动把模型放入到设备中
         train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler = accelerator.prepare(
             train_dataloader, val_dataloader, self.model, self.optimizer, lr_scheduler
         )
@@ -207,7 +221,9 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
             cfg.training.sample_every = 1
 
         # training loop
+        # 训练循环
         log_path = os.path.join(self.output_dir, 'logs.json.txt')
+        # JsonLogger：记录日志的类
         with JsonLogger(log_path) as json_logger:
             for local_epoch_idx in range(cfg.training.num_epochs):
                 self.model.train()
@@ -215,21 +231,28 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                 step_log = dict()
                 # ========= train for this epoch ==========
                 if cfg.training.freeze_encoder:
+                    # eval()表示切换到评估模式，
                     self.model.obs_encoder.eval()
                     self.model.obs_encoder.requires_grad_(False)
 
                 train_losses = list()
+                # 设置进度条信息
                 with tqdm.tqdm(train_dataloader, desc=f"Training epoch {self.epoch}", 
                         leave=False, mininterval=cfg.training.tqdm_interval_sec) as tepoch:
+                    # batch_idx:索引  batch：实际的数据批次  
+                    # enumerate(tepoch)：会返回每个数据批次的索引（batch_idx）和批次本身（batch）。
                     for batch_idx, batch in enumerate(tepoch):
-                        # device transfer
+                        # device transfer   
+                        # non_blocking=True：操作将是非阻塞的，这意味着数据传输（如从CPU到GPU）不会等待当前Python代码执行完成。
                         batch = dict_apply(batch, lambda x: x.to(device, non_blocking=True))
                         
                         # always use the latest batch
                         train_sampling_batch = batch
 
                         # compute loss
+                        # 传入一个批次的数据，输出损失值
                         raw_loss = self.model(batch)
+                        # 这样做是因为在累积多个批次的梯度后，将执行一次更新，所以损失需要按累积的批次数进行平均。
                         loss = raw_loss / cfg.training.gradient_accumulate_every
                         loss.backward()
                         # accelerator.backward(loss)
@@ -242,10 +265,13 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         
                         # update ema
                         if cfg.training.use_ema:
+                            # 给模型解包
                             ema.step(accelerator.unwrap_model(self.model))
 
                         # logging
+                        # 调用 .item() 会返回张量中的数据作为一个标准的Python数值（如 float 或 int）。
                         raw_loss_cpu = raw_loss.item()
+                        # 更新进度条后面的文本信息
                         tepoch.set_postfix(loss=raw_loss_cpu, refresh=False)
                         train_losses.append(raw_loss_cpu)
                         step_log = {
@@ -310,9 +336,13 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                     step_log[f'{category}_action_mse_error_rot'] = torch.nn.functional.mse_loss(pred_action[..., 3:9], gt_action[..., 3:9])
                     step_log[f'{category}_action_mse_error_width'] = torch.nn.functional.mse_loss(pred_action[..., 9], gt_action[..., 9])
                 # run diffusion sampling on a training batch
+                # accelerator.is_main_process表示已经回到主程序，不再进行分布式计算
                 if (self.epoch % cfg.training.sample_every) == 0 and accelerator.is_main_process:
+                    # 使用torch.no_grad()上下文管理器禁用梯度计算
                     with torch.no_grad():
                         # sample trajectory from training set, and evaluate difference
+                        # 采样轨迹，并评估策略
+                        # dict_apply对字典中的每个项执行一个给定的操作，其目的是遍历字典中的每个键值对，并应用提供的函数到值上。
                         batch = dict_apply(train_sampling_batch, lambda x: x.to(device, non_blocking=True))
                         gt_action = batch['action']
                         pred_action = policy.predict_action(batch['obs'], None)['action_pred']
@@ -331,7 +361,8 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                 
                 # checkpoint
                 if (self.epoch % cfg.training.checkpoint_every) == 0 and accelerator.is_main_process:
-                    # unwrap the model to save ckpt
+                    # unwrap the model to save ckpt（checkpoint）
+                    # 解包模型以保存检查点
                     model_ddp = self.model
                     self.model = accelerator.unwrap_model(self.model)
 
@@ -342,13 +373,18 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         self.save_snapshot()
 
                     # sanitize metric names
+                    # 标准化度量指标的名称
                     metric_dict = dict()
                     for key, value in step_log.items():
+                        # 用于将字符串 key 中的所有正斜杠（'/'）替换为下划线（'_'）
                         new_key = key.replace('/', '_')
                         metric_dict[new_key] = value
                     
                     # We can't copy the last checkpoint here
                     # since save_checkpoint uses threads.
+                    # 也就是说可能出现竞态条件
+                    # 这是一种情况，即当多个线程同时尝试访问和修改共享数据时，最终的结果依赖于线程执行的顺序。
+                    # 在这种情况下，如果复制操作开始于检查点文件完全写入之前，复制的文件将不包含预期的数据。
                     # therefore at this point the file might have been empty!
                     topk_ckpt_path = topk_manager.get_ckpt_path(metric_dict)
 
@@ -360,6 +396,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                 # ========= eval end for this epoch ==========
                 # end of epoch
                 # log of last step is combined with validation and rollout
+                # 意味着最后一步的日志记录可能包括了验证和模型滚动（rollout）的结果
                 accelerator.log(step_log, step=self.global_step)
                 json_logger.log(step_log)
                 self.global_step += 1

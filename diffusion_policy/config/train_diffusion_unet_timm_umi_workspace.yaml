@@ -1,8 +1,11 @@
 defaults:
+# 希望“默认列表”中的配置覆盖主配置中的值，请插入“默认列表”中的第一项。_self_
   - _self_
   - task: umi
 
 name: train_diffusion_unet_timm
+# 这个__target__是整个配置文件的__target__
+# 表示在diffusion_policy/workspace/train_diffusion_unet_image_workspace中的TrainDiffusionUnetImageWorkspace类
 _target_: diffusion_policy.workspace.train_diffusion_unet_image_workspace.TrainDiffusionUnetImageWorkspace
 
 task_name: ${task.name}
@@ -12,6 +15,7 @@ exp_name: "default"
 n_action_steps: 8
 
 policy:
+  # 这个__target__是policy的__target__
   _target_: diffusion_policy.policy.diffusion_unet_timm_policy.DiffusionUnetTimmPolicy
 
   shape_meta: ${shape_meta}
@@ -166,6 +170,7 @@ training:
   # training loop control
   # in epochs
   rollout_every: 10
+  # 隔几个回合设置一个ckpt
   checkpoint_every: 10
   val_every: 1
   sample_every: 5
@@ -188,6 +193,7 @@ checkpoint:
   topk:
     monitor_key: train_loss
     mode: min
+    # 它代表要保留的检查点（checkpoint）数量
     k: 20
     format_str: 'epoch={epoch:04d}-train_loss={train_loss:.3f}.ckpt'
   save_last_ckpt: True
