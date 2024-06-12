@@ -33,17 +33,23 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
         super().__init__()
 
         # parse shapes
+        # 解析形状
         action_shape = shape_meta['action']['shape']
         assert len(action_shape) == 1
         action_dim = action_shape[0]
         # get feature dim
+        # 得到特征维度
+        # ？
         obs_feature_dim = obs_encoder.output_shape()[0]
 
         # create diffusion model
+        # 创建扩散模型
         input_dim = action_dim + obs_feature_dim
+        # 全局条件维度（Global Condition Dimension）
         global_cond_dim = None
         if obs_as_global_cond:
             input_dim = action_dim
+            # ? n_obs_steps
             global_cond_dim = obs_feature_dim * n_obs_steps
 
         model = ConditionalUnet1D(
@@ -117,6 +123,7 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
                 ).prev_sample
         
         # finally make sure conditioning is enforced
+        # 在某个过程或算法的最后阶段，确保条件或约束被强制执行
         trajectory[condition_mask] = condition_data[condition_mask]        
 
         return trajectory
@@ -146,6 +153,7 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
         global_cond = None
         if self.obs_as_global_cond:
             # condition through global feature
+            # 通过全局特征进行条件化
             this_nobs = dict_apply(nobs, lambda x: x[:,:To,...].reshape(-1,*x.shape[2:]))
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, Do
@@ -155,6 +163,7 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
             cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
         else:
             # condition through impainting
+            # 通过图像修复进行条件化
             this_nobs = dict_apply(nobs, lambda x: x[:,:To,...].reshape(-1,*x.shape[2:]))
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, T, Do
@@ -173,6 +182,7 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
             **self.kwargs)
         
         # unnormalize prediction
+        # 对预测结果进行反归一化
         naction_pred = nsample[...,:Da]
         action_pred = self.normalizer['action'].unnormalize(naction_pred)
 
@@ -200,6 +210,7 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
         horizon = nactions.shape[1]
 
         # handle different ways of passing observation
+        # 处理不同的观测传递方式，处理来自不同源的训练数据。
         local_cond = None
         global_cond = None
         trajectory = nactions
@@ -234,18 +245,20 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
             0, self.noise_scheduler.config.num_train_timesteps, 
             (trajectory.shape[0],), device=trajectory.device
         ).long()
-        # Add noise to the clean images according to the noise magnitude at each timestep
+        # Add noise to the clean images according to the noise magnitude（巨大的） at each timestep
         # (this is the forward diffusion process)
         noisy_trajectory = self.noise_scheduler.add_noise(
             trajectory, noise_new, timesteps)
         
         # compute loss mask
+        # 计算损失掩码
         loss_mask = ~condition_mask
 
         # apply conditioning
         noisy_trajectory[condition_mask] = cond_data[condition_mask]
         
         # Predict the noise residual
+        # 预测噪声残差
         pred = self.model(noisy_trajectory, timesteps, 
             local_cond=local_cond, global_cond=global_cond)
 
