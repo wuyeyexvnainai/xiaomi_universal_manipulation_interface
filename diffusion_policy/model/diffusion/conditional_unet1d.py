@@ -82,7 +82,9 @@ class ConditionalUnet1D(nn.Module):
         start_dim = down_dims[0]
 
         dsed = diffusion_step_embed_dim
+        # 创建一个网络模型
         diffusion_step_encoder = nn.Sequential(
+            # 实现正弦位置嵌入（Sinusoidal Positional Encoding）
             SinusoidalPosEmb(dsed),
             nn.Linear(dsed, dsed * 4),
             nn.Mish(),
@@ -91,7 +93,7 @@ class ConditionalUnet1D(nn.Module):
         cond_dim = dsed
         if global_cond_dim is not None:
             cond_dim += global_cond_dim
-
+        # 将相邻元素变为一个组元
         in_out = list(zip(all_dims[:-1], all_dims[1:]))
 
         local_cond_encoder = None

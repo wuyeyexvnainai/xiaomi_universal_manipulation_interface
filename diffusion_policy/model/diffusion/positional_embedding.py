@@ -8,9 +8,13 @@ class SinusoidalPosEmb(nn.Module):
         self.dim = dim
 
     def forward(self, x):
+        # 获取设备
         device = x.device
+        # 计算维度的一半
         half_dim = self.dim // 2
+        # 计算每个位置的对数间隔
         emb = math.log(10000) / (half_dim - 1)
+        # 位置编码公式
         emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
         emb = x[:, None] * emb[None, :]
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
