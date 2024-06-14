@@ -39,7 +39,7 @@ class ConditionalResidualBlock1D(nn.Module):
             Rearrange('batch t -> batch t 1'),
         )
 
-        # make sure dimensions compatible
+        # make sure dimensions compatible(兼容)
         self.residual_conv = nn.Conv1d(in_channels, out_channels, 1) \
             if in_channels != out_channels else nn.Identity()
 
@@ -129,6 +129,7 @@ class ConditionalUnet1D(nn.Module):
 
         down_modules = nn.ModuleList([])
         for ind, (dim_in, dim_out) in enumerate(in_out):
+            # 如果当前的索引ind等于in_out列表长度减去1，说明是最后一个元素，将is_last设置为True。
             is_last = ind >= (len(in_out) - 1)
             down_modules.append(nn.ModuleList([
                 ConditionalResidualBlock1D(
@@ -143,6 +144,8 @@ class ConditionalUnet1D(nn.Module):
             ]))
 
         up_modules = nn.ModuleList([])
+        # 从 in_out 列表中取出除了第一个元素之外的所有元素，返回一个新的列表。
+        # reversed() 函数接受这个列表作为参数，并返回一个逆序列表的迭代器。
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out[1:])):
             is_last = ind >= (len(in_out) - 1)
             up_modules.append(nn.ModuleList([
@@ -174,15 +177,19 @@ class ConditionalUnet1D(nn.Module):
 
     def forward(self, 
             sample: torch.Tensor, 
+            # 用于指示函数或方法的参数可以是多种类型中的一种
             timestep: Union[torch.Tensor, float, int], 
             local_cond=None, global_cond=None, **kwargs):
         """
+        B: 批量的大小 batch size
+        T: 时间步数或序列长度 time steps
         x: (B,T,input_dim)
         timestep: (B,) or int, diffusion step
         local_cond: (B,T,local_cond_dim)
         global_cond: (B,global_cond_dim)
         output: (B,T,input_dim)
         """
+        # 重新对张量的顺序进行排列
         sample = einops.rearrange(sample, 'b h t -> b t h')
 
         # 1. time
@@ -207,6 +214,7 @@ class ConditionalUnet1D(nn.Module):
         if local_cond is not None:
             local_cond = einops.rearrange(local_cond, 'b h t -> b t h')
             resnet, resnet2 = self.local_cond_encoder
+            # 将local_cond, global_feature输入到resnet层中
             x = resnet(local_cond, global_feature)
             h_local.append(x)
             x = resnet2(local_cond, global_feature)
@@ -228,6 +236,7 @@ class ConditionalUnet1D(nn.Module):
         for idx, (resnet, resnet2, upsample) in enumerate(self.up_modules):
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
+            # 如果当前索引 idx 等于 self.up_modules 的长度，并且局部历史特征列表 h_local 不为空
             if idx == len(self.up_modules) and len(h_local) > 0:
                 x = x + h_local[1]
             x = resnet2(x, global_feature)

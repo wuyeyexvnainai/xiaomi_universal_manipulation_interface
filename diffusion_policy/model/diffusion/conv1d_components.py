@@ -22,7 +22,7 @@ class Upsample1d(nn.Module):
 
 class Conv1dBlock(nn.Module):
     '''
-        Conv1d --> GroupNorm --> Mish
+        Conv1d(一维卷积层) --> GroupNorm(分组归一化层) --> Mish(Mish激活函数)
     '''
 
     def __init__(self, inp_channels, out_channels, kernel_size, n_groups=8):
